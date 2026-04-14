@@ -1,0 +1,234 @@
+"""Monday.com GraphQL API client with pagination and rate limiting."""
+
+import json
+import logging
+import os
+import time
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+BOARD_QUERY = """
+query ($boardId: [ID!]!) {
+  boards(ids: $boardId) {
+    name
+    groups { id title }
+    columns { id title type settings_str }
+    items_page(limit: 500) {
+      cursor
+      items {
+        id
+        name
+        group { id title }
+        created_at
+        updated_at
+        column_values {
+          id
+          text
+          value
+          type
+        }
+        subitems {
+          id
+          name
+          column_values {
+            id
+            text
+            value
+            type
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+PAGINATION_QUERY = """
+query ($boardId: [ID!]!, $cursor: String!) {
+  boards(ids: $boardId) {
+    items_page(limit: 500, cursor: $cursor) {
+      cursor
+      items {
+        id
+        name
+        group { id title }
+        created_at
+        updated_at
+        column_values {
+          id
+          text
+          value
+          type
+        }
+        subitems {
+          id
+          name
+          column_values {
+            id
+            text
+            value
+            type
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+class MondayClient:
+    """Wraps the Monday.com GraphQL API with pagination and status label resolution."""
+
+    def __init__(self, config: dict):
+        self.api_url = config["monday"]["api_url"]
+        token_env = config["monday"]["token_env"]
+        self.token = os.environ.get(token_env)
+        if not self.token:
+            raise RuntimeError(
+                f"Monday.com API token not found in environment variable '{token_env}'. "
+                f"Set it with: export {token_env}=your_token"
+            )
+        self.headers = {
+            "Authorization": self.token,
+            "Content-Type": "application/json",
+        }
+        self._delay = 1.0  # seconds between board fetches for rate limiting
+
+    def _execute(self, query: str, variables: dict) -> dict:
+        """Execute a GraphQL query against Monday.com."""
+        payload = json.dumps({"query": query, "variables": variables})
+        resp = requests.post(self.api_url, headers=self.headers, data=payload, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            raise RuntimeError(f"Monday.com API errors: {data['errors']}")
+        return data["data"]
+
+    def fetch_board(self, board_id: int) -> dict:
+        """Fetch a complete board including all items with cursor-based pagination."""
+        logger.info("Fetching board %s", board_id)
+        data = self._execute(BOARD_QUERY, {"boardId": [str(board_id)]})
+        board = data["boards"][0]
+
+        # Build column settings lookup for status label resolution
+        column_settings = {}
+        for col in board.get("columns", []):
+            column_settings[col["id"]] = col
+
+        # Collect all items across pages
+        items_page = board["items_page"]
+        all_items = list(items_page["items"])
+        cursor = items_page["cursor"]
+
+        while cursor:
+            logger.info("  Paginating board %s (fetched %d items so far)", board_id, len(all_items))
+            page_data = self._execute(
+                PAGINATION_QUERY,
+                {"boardId": [str(board_id)], "cursor": cursor},
+            )
+            page = page_data["boards"][0]["items_page"]
+            all_items.extend(page["items"])
+            cursor = page["cursor"]
+
+        # Resolve status labels
+        resolved_items = [
+            self._resolve_item(item, column_settings) for item in all_items
+        ]
+
+        return {
+            "name": board["name"],
+            "groups": board.get("groups", []),
+            "columns": board.get("columns", []),
+            "items": resolved_items,
+        }
+
+    def fetch_all_boards(self, board_configs: list[dict]) -> dict:
+        """Fetch all configured boards with a delay between each to respect rate limits."""
+        boards = {}
+        for i, bc in enumerate(board_configs):
+            board_id = bc["id"]
+            try:
+                boards[str(board_id)] = self.fetch_board(board_id)
+            except Exception:
+                logger.exception("Failed to fetch board %s (%s)", board_id, bc.get("name", "?"))
+                continue
+            # Rate-limit delay between boards (skip after last)
+            if i < len(board_configs) - 1:
+                time.sleep(self._delay)
+        return boards
+
+    # ---- helpers ----
+
+    def _resolve_item(self, item: dict, column_settings: dict) -> dict:
+        """Resolve status column indices to human-readable labels."""
+        resolved_columns = {}
+        status = None
+        date_val = None
+        assignee = None
+
+        for cv in item.get("column_values", []):
+            col_id = cv["id"]
+            col_meta = column_settings.get(col_id, {})
+            col_type = cv.get("type") or col_meta.get("type", "")
+            display_text = cv.get("text", "")
+
+            # Resolve status labels from settings_str
+            if col_type == "status" and cv.get("value"):
+                display_text = self._resolve_status_label(cv["value"], col_meta)
+
+            resolved_columns[col_id] = {
+                "title": col_meta.get("title", col_id),
+                "type": col_type,
+                "text": display_text,
+                "value": cv.get("value"),
+            }
+
+            # Extract key fields
+            if col_type == "status" and status is None:
+                status = display_text
+            if col_type in ("date", "date") and date_val is None and display_text:
+                date_val = display_text.split(" ")[0] if display_text else None
+            if col_type in ("people", "person") and not assignee and display_text:
+                assignee = display_text
+
+        # Resolve subitems recursively (no deep column_settings needed)
+        subitems = []
+        for si in item.get("subitems", []):
+            subitems.append({
+                "id": si["id"],
+                "name": si["name"],
+                "columns": {
+                    cv["id"]: {"text": cv.get("text", ""), "value": cv.get("value")}
+                    for cv in si.get("column_values", [])
+                },
+            })
+
+        return {
+            "id": item["id"],
+            "name": item["name"],
+            "group": item.get("group", {}).get("title", ""),
+            "status": status or "",
+            "date": date_val,
+            "assignee": assignee or "",
+            "created_at": item.get("created_at"),
+            "last_updated": item.get("updated_at"),
+            "subitems": subitems,
+            "raw_columns": resolved_columns,
+        }
+
+    @staticmethod
+    def _resolve_status_label(raw_value: str, col_meta: dict) -> str:
+        """Given a status column's raw JSON value and the column settings, return the label."""
+        try:
+            val = json.loads(raw_value) if isinstance(raw_value, str) else raw_value
+            index = val.get("index")
+            if index is None:
+                return ""
+            settings = json.loads(col_meta.get("settings_str", "{}"))
+            labels = settings.get("labels", {})
+            return labels.get(str(index), f"Unknown({index})")
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return str(raw_value)

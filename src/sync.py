@@ -1,0 +1,115 @@
+"""Core sync logic: pull Monday.com boards, save snapshots, compute diffs."""
+
+import json
+import logging
+import os
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
+
+from .monday_client import MondayClient
+from .diff import compute_diff
+
+logger = logging.getLogger(__name__)
+
+
+def load_config(config_path: str = "config.yaml") -> dict:
+    """Load and return the YAML config."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def run_sync(config_path: str = "config.yaml") -> dict:
+    """
+    Main sync entrypoint:
+    1. Load config
+    2. Fetch all boards from Monday.com
+    3. Save timestamped snapshot
+    4. Rotate latest.json -> previous.json
+    5. Compute diff against previous snapshot
+    6. Save diff
+    Returns the diff dict (or empty dict if no previous snapshot).
+    """
+    config = load_config(config_path)
+    client = MondayClient(config)
+
+    now = datetime.now(timezone.utc).astimezone()
+    timestamp = now.isoformat()
+    file_ts = now.strftime("%Y-%m-%d_%H%M")
+
+    snapshot_dir = Path(config["sync"]["snapshot_dir"])
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fetch all boards
+    logger.info("Starting sync at %s", timestamp)
+    boards_data = client.fetch_all_boards(config["boards"])
+
+    snapshot = {
+        "timestamp": timestamp,
+        "boards": boards_data,
+    }
+
+    # Save timestamped snapshot
+    snapshot_path = snapshot_dir / f"{file_ts}.json"
+    _write_json(snapshot_path, snapshot)
+    logger.info("Snapshot saved: %s", snapshot_path)
+
+    # Rotate latest -> previous
+    latest_path = Path("data/latest.json")
+    previous_path = Path("data/previous.json")
+
+    has_previous = latest_path.exists()
+    if has_previous:
+        shutil.copy2(latest_path, previous_path)
+
+    # Write new latest
+    _write_json(latest_path, snapshot)
+
+    # Compute diff if we have a previous snapshot
+    diff = {}
+    if has_previous:
+        previous = _read_json(previous_path)
+        diff = compute_diff(previous, snapshot, config)
+
+        # Save diff
+        diffs_dir = Path("data/diffs")
+        diffs_dir.mkdir(parents=True, exist_ok=True)
+        diff_path = diffs_dir / f"{file_ts}_diff.json"
+        _write_json(diff_path, diff)
+
+        # Also keep a latest_diff.json for the briefing generator
+        _write_json(Path("data/diffs/latest_diff.json"), diff)
+        logger.info("Diff saved: %s", diff_path)
+    else:
+        logger.info("No previous snapshot — skipping diff (first run)")
+
+    # Cleanup old snapshots
+    _cleanup_old_snapshots(snapshot_dir, config["sync"].get("keep_snapshots", 30))
+
+    logger.info("Sync complete")
+    return diff
+
+
+def _write_json(path: Path, data: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+def _read_json(path: Path) -> dict:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _cleanup_old_snapshots(snapshot_dir: Path, keep_days: int):
+    """Remove snapshots older than keep_days."""
+    now = datetime.now(timezone.utc)
+    for f in sorted(snapshot_dir.glob("*.json")):
+        if f.name == ".gitkeep":
+            continue
+        age_days = (now.timestamp() - f.stat().st_mtime) / 86400
+        if age_days > keep_days:
+            logger.info("Removing old snapshot: %s (%.0f days old)", f.name, age_days)
+            f.unlink()
