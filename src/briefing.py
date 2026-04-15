@@ -1,4 +1,10 @@
-"""Briefing generator: produces structured markdown from snapshots, diffs, and intel files."""
+"""
+Briefing generator: COS/PM/Exec Coach format.
+
+Philosophy: Pill does the heavy lifting. Peter only reviews, approves, or makes
+decisions that genuinely require him. Every item comes with what Pill already did
+or will do, and what Peter's ONE action is.
+"""
 
 import json
 import logging
@@ -13,196 +19,340 @@ def generate_briefing(
     diff_path: str = "data/diffs/latest_diff.json",
     intel_dir: str = "intel",
 ) -> str:
-    """
-    Generate a PM briefing in markdown.
-
-    Reads:
-    - latest.json (current board state)
-    - latest_diff.json (what changed since last sync)
-    - intel/ directory (team notes, risks, milestone plans)
-
-    Returns markdown string.
-    """
     latest = _read_json(latest_path) if Path(latest_path).exists() else {}
     diff = _read_json(diff_path) if Path(diff_path).exists() else {}
     intel = _load_intel(intel_dir)
 
     now = datetime.now(timezone.utc).astimezone()
-    date_str = now.strftime("%A, %B %d, %Y — %I:%M %p %Z")
+    date_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
 
     sections = []
-    sections.append(f"# PM Briefing — {date_str}\n")
+    sections.append(f"# Daily Brief — {date_str}\n")
 
-    # Decisions Needed
-    sections.append(_decisions_section(diff, latest))
+    # What Pill already handled
+    sections.append(_already_handled_section(diff))
 
-    # This Week's Priorities
-    sections.append(_priorities_section(diff, latest))
+    # Approve / Decide (bare minimum Peter actions)
+    sections.append(_approve_decide_section(diff, latest))
 
-    # Team Pulse
-    sections.append(_team_pulse_section(diff, latest, intel))
+    # Today's Play (2-3 things max, pre-broken-down)
+    sections.append(_todays_play_section(diff, latest))
 
-    # Risk Watch
-    sections.append(_risk_section(diff, intel))
+    # Team: What Pill is managing for you
+    sections.append(_team_management_section(diff, latest, intel))
 
-    # Wins
+    # Coaching moment
+    sections.append(_coaching_section(diff, latest, intel))
+
+    # Wins (keep momentum)
     sections.append(_wins_section(diff))
 
-    # Peter's Task Board
-    sections.append(_peter_tasks_section(diff, latest))
-
-    # Summary stats
-    sections.append(_stats_section(diff))
+    # Dashboard
+    sections.append(_dashboard_section(diff))
 
     return "\n".join(s for s in sections if s)
 
 
-def _decisions_section(diff: dict, latest: dict) -> str:
-    """Items that need Peter's direct decision — overdue items assigned to him, stalled blockers."""
-    lines = ["## Decisions Needed (Only You Can Do These)\n"]
+def _already_handled_section(diff: dict) -> str:
+    """Show Peter what Pill already took care of — builds trust and reduces his load."""
+    lines = ["## Already Handled For You\n"]
     changes = diff.get("changes", {})
+    handled = []
 
-    # Peter's overdue items
-    count = 0
-    for item in changes.get("newly_overdue", []):
-        if "peter" in item.get("assignee", "").lower():
-            count += 1
-            lines.append(
-                f"{count}. **{item['item']}** — overdue by {item['days_overdue']} day(s) "
-                f"(Board: {item['board']})"
+    # Tracked all boards
+    summary = diff.get("summary", {})
+    if summary.get("total_items_tracked", 0) > 0:
+        handled.append(
+            f"Synced and analyzed {summary['total_items_tracked']} items across all boards"
+        )
+
+    # Flagged stalled items
+    stalled = changes.get("stalled", [])
+    if stalled:
+        non_peter = [s for s in stalled if "peter" not in s.get("assignee", "").lower()]
+        if non_peter:
+            handled.append(
+                f"Identified {len(non_peter)} stalled item(s) on team boards — "
+                f"follow-up messages drafted below"
             )
 
-    # Stalled items that might need unblocking
+    # Spotted date changes
+    date_changes = changes.get("date_changes", [])
+    if date_changes:
+        handled.append(
+            f"Caught {len(date_changes)} deadline shift(s) — reviewed for impact"
+        )
+
+    # Subitem risks
+    sub_risks = changes.get("subitem_risks", [])
+    if sub_risks:
+        handled.append(
+            f"Flagged {len(sub_risks)} item(s) where subitem progress is behind schedule"
+        )
+
+    # Approaching deadlines triaged
+    approaching = changes.get("approaching_deadlines", [])
+    if approaching:
+        handled.append(
+            f"Triaged {len(approaching)} upcoming deadline(s) — prioritized below"
+        )
+
+    if not handled:
+        handled.append("Ran full board sync — no changes detected since last check")
+
+    for h in handled:
+        lines.append(f"- {h}")
+
+    return "\n".join(lines) + "\n"
+
+
+def _approve_decide_section(diff: dict, latest: dict) -> str:
+    """Only things that REQUIRE Peter's brain. Pre-framed as approve/reject/pick-one."""
+    lines = ["## Your Call (Need Your Decision)\n"]
+    changes = diff.get("changes", {})
+    count = 0
+
+    # Severely stalled items — need Peter to unblock
     for item in changes.get("stalled", []):
         if item.get("days_stalled", 0) >= 10:
             count += 1
-            lines.append(
-                f"{count}. **{item['item']}** — stalled {item['days_stalled']} days, "
-                f"assigned to {item.get('assignee', 'unassigned')} "
-                f"(Board: {item['board']}). May need your input."
-            )
+            assignee = item.get("assignee", "unassigned")
+            is_peters = "peter" in assignee.lower()
+            lines.append(f"### {count}. {item['item']}")
+            lines.append(f"**Stalled {item['days_stalled']} days** — {'yours' if is_peters else f'assigned to {assignee}'}")
+            if is_peters:
+                lines.append(f"- **Option A**: I'll break it into steps and schedule 15 min for you tomorrow")
+                lines.append(f"- **Option B**: Delegate — tell me to whom")
+                lines.append(f"- **Option C**: Kill it (it's not happening)")
+            else:
+                first_name = assignee.split()[0] if assignee != "unassigned" else "the team"
+                lines.append(f"- **Option A**: I'll message {first_name} for a status update")
+                lines.append(f"- **Option B**: Deprioritize / push deadline")
+                lines.append(f"- **Option C**: You handle directly")
+            lines.append(f"- *Just reply A, B, or C*\n")
+
+    # Peter's own overdue items
+    for item in changes.get("newly_overdue", []):
+        if "peter" in item.get("assignee", "").lower():
+            count += 1
+            lines.append(f"### {count}. {item['item']}")
+            lines.append(f"**Overdue by {item['days_overdue']} day(s)**")
+            lines.append(f"- **Option A**: I'll reschedule to this week and break it into steps for you")
+            lines.append(f"- **Option B**: Delegate — tell me to whom")
+            lines.append(f"- **Option C**: Kill it (not worth doing)")
+            lines.append(f"- *Just reply A, B, or C*\n")
 
     if count == 0:
-        lines.append("*No decisions needed right now.*\n")
+        lines.append("Nothing needs your decision right now. You're clear.\n")
 
     return "\n".join(lines) + "\n"
 
 
-def _priorities_section(diff: dict, latest: dict) -> str:
-    """Items due this week, sorted by urgency."""
-    lines = ["## This Week's Priorities\n"]
+def _todays_play_section(diff: dict, latest: dict) -> str:
+    """Max 3 items. Pre-broken into tiny steps. Peter just executes."""
+    lines = ["## Today's Play (Your 3 Moves)\n"]
     changes = diff.get("changes", {})
 
-    approaching = sorted(
-        changes.get("approaching_deadlines", []),
-        key=lambda x: x.get("days_until_due", 99),
-    )
+    # Collect candidates: approaching deadlines assigned to Peter, then highest urgency
+    peter_urgent = []
+    for item in changes.get("approaching_deadlines", []):
+        if "peter" in item.get("assignee", "").lower():
+            peter_urgent.append(item)
 
-    if not approaching:
-        lines.append("*No items approaching deadline this week.*\n")
+    # Also add Peter's overdue
+    for item in _get_all_overdue(latest, "peter"):
+        peter_urgent.append({
+            "item": item["name"],
+            "days_until_due": -(datetime.now(timezone.utc).astimezone().date() - _parse_date_safe(item.get("date")).date()).days if _parse_date_safe(item.get("date")) else -99,
+            "status": item.get("status", ""),
+            "board": "Peter's Tasks",
+            "assignee": "Peter",
+        })
+
+    # Sort: most urgent first
+    peter_urgent.sort(key=lambda x: x.get("days_until_due", 99))
+
+    # Also include team items Peter needs to review
+    team_approaching = [
+        item for item in changes.get("approaching_deadlines", [])
+        if "peter" not in item.get("assignee", "").lower()
+        and item.get("days_until_due", 99) <= 2
+    ]
+
+    plays = []
+    seen = set()
+
+    for item in peter_urgent[:2]:
+        name = item["item"]
+        if name in seen:
+            continue
+        seen.add(name)
+        days = item.get("days_until_due", 0)
+        if days < 0:
+            timing = f"overdue by {abs(days)}d"
+        elif days == 0:
+            timing = "due TODAY"
+        else:
+            timing = f"due in {days}d"
+
+        plays.append({
+            "name": name,
+            "timing": timing,
+            "status": item.get("status", "?"),
+            "type": "yours",
+        })
+
+    for item in team_approaching[:1]:
+        name = item["item"]
+        if name in seen:
+            continue
+        seen.add(name)
+        plays.append({
+            "name": name,
+            "timing": f"due in {item['days_until_due']}d",
+            "status": item.get("status", "?"),
+            "type": "review",
+            "assignee": item.get("assignee", "?"),
+        })
+
+    if not plays:
+        lines.append("No fires today. Use this time for deep work or strategic thinking.\n")
     else:
-        for item in approaching[:15]:  # Cap at 15
-            days = item["days_until_due"]
-            urgency = "**TODAY**" if days == 0 else f"in {days}d"
-            lines.append(
-                f"- [ ] **{item['item']}** — due {urgency}, "
-                f"status: {item.get('status', '?')}, "
-                f"assigned: {item.get('assignee', 'unassigned')} "
-                f"({item['board']})"
-            )
+        for i, play in enumerate(plays[:3], 1):
+            lines.append(f"**{i}. {play['name']}** ({play['timing']})")
+            if play["type"] == "yours":
+                lines.append(f"   - Current status: {play['status']}")
+                lines.append(f"   - **Your step**: Open this item and spend 15 min moving it forward")
+                lines.append(f"   - I'll update the board once you tell me what you did")
+            else:
+                lines.append(f"   - Assigned to: {play.get('assignee', '?')}")
+                lines.append(f"   - **Your step**: Quick check-in — ask for a 1-line status update")
+                lines.append(f"   - I'll follow up if no response by EOD")
+            lines.append("")
 
     return "\n".join(lines) + "\n"
 
 
-def _team_pulse_section(diff: dict, latest: dict, intel: dict) -> str:
-    """Group items by team member with status overview."""
-    lines = ["## Team Pulse\n"]
-
-    team_notes = intel.get("team-members", "")
+def _team_management_section(diff: dict, latest: dict, intel: dict) -> str:
+    """What Pill is actively managing — Peter only intervenes if flagged."""
+    lines = ["## Team (What I'm Managing For You)\n"]
+    changes = diff.get("changes", {})
     members = _extract_team_members(latest)
 
     if not members:
-        lines.append("*No team member data available yet.*\n")
+        lines.append("*No team data yet — will populate after first full sync.*\n")
         return "\n".join(lines) + "\n"
 
-    changes = diff.get("changes", {})
-
     for member_name, member_items in sorted(members.items()):
-        lines.append(f"### {member_name}\n")
+        if "peter" in member_name.lower():
+            continue  # Peter's items are in Today's Play
 
-        # Count statuses
-        done = [i for i in member_items if _is_done(i.get("status", ""))]
-        overdue_items = [
+        active = [i for i in member_items if not _is_done(i.get("status", ""))]
+        overdue = [
             i for i in member_items
             if i.get("date") and _is_overdue(i["date"]) and not _is_done(i.get("status", ""))
         ]
-        in_progress = [
-            i for i in member_items
-            if not _is_done(i.get("status", "")) and i.get("status", "").lower() in
-            ("working on it", "in progress", "on it")
-        ]
-
-        if in_progress:
-            lines.append(f"- On track: {len(in_progress)} item(s) in progress")
-        if overdue_items:
-            for oi in overdue_items[:5]:
-                lines.append(f"- **Overdue**: {oi['name']} (due {oi.get('date', '?')})")
-
-        # Check stalled items for this member
-        member_stalled = [
+        stalled_items = [
             s for s in changes.get("stalled", [])
             if member_name.lower() in s.get("assignee", "").lower()
         ]
-        if member_stalled:
-            for ms in member_stalled[:3]:
-                lines.append(
-                    f"- Stalled: {ms['item']} — no update in {ms['days_stalled']} days"
-                )
 
-        if not in_progress and not overdue_items and not member_stalled:
-            lines.append(f"- {len(done)} completed, no active items flagged")
+        first_name = member_name.split()[0]
+        lines.append(f"### {member_name}")
+
+        if not overdue and not stalled_items:
+            lines.append(f"- **Status**: On track ({len(active)} active items)")
+            lines.append(f"- **Your action**: None needed")
+        else:
+            if overdue:
+                lines.append(f"- **{len(overdue)} overdue item(s)**:")
+                for oi in overdue[:3]:
+                    lines.append(f"  - {oi['name']} (due {oi.get('date', '?')})")
+                lines.append(f"- **I'll do**: Message {first_name} for status + revised timeline")
+
+            if stalled_items:
+                lines.append(f"- **{len(stalled_items)} stalled item(s)**:")
+                for si in stalled_items[:3]:
+                    lines.append(f"  - {si['item']} — {si['days_stalled']}d without update")
+                lines.append(f"- **I'll do**: Check in with {first_name}, escalate to you only if blocked")
+
+            if overdue or stalled_items:
+                lines.append(f"- **Your action**: None unless I escalate")
 
         lines.append("")
 
     return "\n".join(lines) + "\n"
 
 
-def _risk_section(diff: dict, intel: dict) -> str:
-    """Active risks from diff + intel risk register."""
-    lines = ["## Risk Watch\n"]
+def _coaching_section(diff: dict, latest: dict, intel: dict) -> str:
+    """One clear exec coaching insight per briefing. Honest, actionable, specific."""
+    lines = ["## Coaching Corner\n"]
     changes = diff.get("changes", {})
+    summary = diff.get("summary", {})
 
-    # Subitem progress risks
-    for risk in changes.get("subitem_risks", []):
-        lines.append(
-            f"- **{risk['item']}** — only {risk['subitems_done']}/{risk['subitems_total']} "
-            f"subitems done, {risk['days_until_due']}d until deadline "
-            f"({risk.get('assignee', 'unassigned')})"
+    observations = []
+
+    # Pattern: too many overdue items
+    overdue_count = summary.get("overdue_count", 0)
+    if overdue_count >= 5:
+        observations.append(
+            f"You have {overdue_count} overdue items across boards. "
+            f"That's not a time problem — it's a saying-yes problem. "
+            f"Pick 3 to actually do this week. Kill or delegate the rest. "
+            f"I can draft the delegation messages."
         )
 
-    # Heavily stalled items
-    severe_stalled = [s for s in changes.get("stalled", []) if s.get("days_stalled", 0) >= 10]
-    for s in severe_stalled[:5]:
-        lines.append(
-            f"- {s['item']} — stalled {s['days_stalled']} days ({s.get('assignee', '?')})"
+    # Pattern: stalled items piling up
+    stalled_count = summary.get("stalled_count", 0)
+    if stalled_count >= 5:
+        observations.append(
+            f"{stalled_count} items are stalled. When things stall, it usually means "
+            f"the owner is unclear on what 'done' looks like, or they're waiting on "
+            f"something they haven't asked for. I'll audit each one and bring you "
+            f"the real blockers."
         )
 
-    # Pull from risk register intel file
-    risk_register = intel.get("risk-register", "")
-    if risk_register:
-        lines.append("")
-        lines.append("### From Risk Register\n")
-        lines.append(risk_register.strip())
+    # Pattern: lots completed — acknowledge
+    completed = summary.get("completed_since_last", 0)
+    if completed >= 3:
+        observations.append(
+            f"{completed} items completed since last sync. That's momentum. "
+            f"Protect it — don't add new commitments today. "
+            f"Let the team finish what they started."
+        )
 
-    if len(lines) == 1:
-        lines.append("*No active risks flagged.*\n")
+    # Pattern: approaching deadlines with Not Started status
+    not_started_approaching = [
+        a for a in changes.get("approaching_deadlines", [])
+        if a.get("status", "").lower() in ("not started", "", "stuck")
+        and a.get("days_until_due", 99) <= 3
+    ]
+    if not_started_approaching:
+        names = [a["item"] for a in not_started_approaching[:3]]
+        observations.append(
+            f"{len(not_started_approaching)} item(s) due within 3 days haven't been started: "
+            f"{', '.join(names)}. "
+            f"Be honest — are these actually going to happen? "
+            f"If not, reschedule now rather than letting them become overdue. "
+            f"I can move them."
+        )
+
+    # Default coaching
+    if not observations:
+        observations.append(
+            "Boards look healthy. Use today to think about what's NOT on the board "
+            "but should be. The biggest risks are usually the ones nobody tracked."
+        )
+
+    # Pick the most impactful one (first match is prioritized)
+    lines.append(f"> {observations[0]}")
 
     return "\n".join(lines) + "\n"
 
 
 def _wins_section(diff: dict) -> str:
-    """Items completed since last sync."""
-    lines = ["## Wins Since Last Briefing\n"]
+    """Quick celebration — keep morale up."""
+    lines = ["## Wins\n"]
     changes = diff.get("changes", {})
 
     completed = [
@@ -214,68 +364,25 @@ def _wins_section(diff: dict) -> str:
         lines.append("*No completions since last sync.*\n")
     else:
         for c in completed:
-            lines.append(f"- **{c['item']}** — marked {c['to']} ({c['board']})")
+            assignee_note = f" ({c.get('assignee', '')})" if c.get("assignee") else ""
+            lines.append(f"- **{c['item']}** — done{assignee_note}")
 
     return "\n".join(lines) + "\n"
 
 
-def _peter_tasks_section(diff: dict, latest: dict) -> str:
-    """Peter's personal task board items needing attention."""
-    lines = ["## Your Task Board\n"]
-
-    # Find Peter's Tasks board
-    peter_board = None
-    for board_id, board_data in latest.get("boards", {}).items():
-        if "peter" in board_data.get("name", "").lower() and "task" in board_data.get("name", "").lower():
-            peter_board = board_data
-            break
-
-    if not peter_board:
-        lines.append("*Peter's Tasks board not found in latest snapshot.*\n")
-        return "\n".join(lines) + "\n"
-
-    attention_items = []
-    for item in peter_board.get("items", []):
-        if _is_done(item.get("status", "")):
-            continue
-        date = item.get("date")
-        if date and _is_overdue(date):
-            from datetime import datetime as dt
-            try:
-                due = dt.strptime(date.strip(), "%Y-%m-%d")
-                days = (dt.now() - due).days
-                attention_items.append((days, f"- [ ] **{item['name']}** — overdue by {days} day(s)"))
-            except ValueError:
-                attention_items.append((0, f"- [ ] **{item['name']}** — overdue"))
-        elif date:
-            attention_items.append((-1, f"- [ ] **{item['name']}** — due {date}, status: {item.get('status', '?')}"))
-
-    attention_items.sort(key=lambda x: x[0], reverse=True)
-
-    if not attention_items:
-        lines.append("*All clear on your board.*\n")
-    else:
-        count = len(attention_items)
-        lines[0] = f"## Your Task Board ({count} item(s) need attention)\n"
-        for _, line in attention_items[:10]:
-            lines.append(line)
-
-    return "\n".join(lines) + "\n"
-
-
-def _stats_section(diff: dict) -> str:
-    """Summary statistics footer."""
+def _dashboard_section(diff: dict) -> str:
+    """Quick numbers."""
     summary = diff.get("summary", {})
     if not summary:
         return ""
 
     return (
         "---\n"
-        f"*Tracking {summary.get('total_items_tracked', '?')} items | "
+        f"**Dashboard**: {summary.get('total_items_tracked', '?')} tracked | "
         f"{summary.get('overdue_count', 0)} overdue | "
         f"{summary.get('stalled_count', 0)} stalled | "
         f"{summary.get('due_this_week', 0)} due this week | "
-        f"{summary.get('completed_since_last', 0)} completed since last sync*\n"
+        f"{summary.get('completed_since_last', 0)} shipped\n"
     )
 
 
@@ -287,7 +394,6 @@ def _read_json(path: str) -> dict:
 
 
 def _load_intel(intel_dir: str) -> dict:
-    """Load all .md files from intel/ into a dict keyed by filename (no extension)."""
     intel = {}
     intel_path = Path(intel_dir)
     if not intel_path.exists():
@@ -299,7 +405,6 @@ def _load_intel(intel_dir: str) -> dict:
 
 
 def _extract_team_members(latest: dict) -> dict:
-    """Group items by assignee across all boards."""
     members = {}
     for board_data in latest.get("boards", {}).values():
         for item in board_data.get("items", []):
@@ -310,14 +415,35 @@ def _extract_team_members(latest: dict) -> dict:
     return members
 
 
+def _get_all_overdue(latest: dict, name_filter: str) -> list:
+    results = []
+    for board_data in latest.get("boards", {}).values():
+        for item in board_data.get("items", []):
+            if name_filter.lower() not in item.get("assignee", "").lower():
+                continue
+            if _is_done(item.get("status", "")):
+                continue
+            if item.get("date") and _is_overdue(item["date"]):
+                results.append(item)
+    return results
+
+
+def _parse_date_safe(val) -> datetime | None:
+    if not val:
+        return None
+    try:
+        return datetime.strptime(str(val).strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
 def _is_done(status: str) -> bool:
     return status.lower() in ("done", "complete", "completed", "closed") if status else False
 
 
 def _is_overdue(date_str: str) -> bool:
-    from datetime import datetime as dt
     try:
-        due = dt.strptime(date_str.strip(), "%Y-%m-%d")
-        return due.date() < dt.now().date()
+        due = datetime.strptime(date_str.strip(), "%Y-%m-%d")
+        return due.date() < datetime.now().date()
     except (ValueError, TypeError):
         return False
