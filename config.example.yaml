@@ -1,0 +1,100 @@
+monday:
+  api_url: "https://api.monday.com/v2"
+  token_env: "MONDAY_API_TOKEN"  # Read from environment variable
+
+sync:
+  snapshot_dir: "data/snapshots"
+  keep_snapshots: 30  # Days to retain
+  stalled_threshold_days: 5
+  approaching_deadline_days: 7
+
+boards:
+  - id: 320096424
+    name: "Peter's Tasks"
+    check_frequency: "2x_daily"
+    columns_of_interest:
+      - name
+      - status
+      - date4
+      - note
+      - people
+
+  - id: 18400842425
+    name: "'26 Summer NYC Curriculum Milestones"
+    check_frequency: "daily"
+    columns_of_interest:
+      - name
+      - person
+      - date_mm0qegqm
+      - color__1
+      - status9__1
+      - dup__of_date__mc__1
+      - dup__of_mc__1
+      - date_1__1
+      - status77__1
+      - status20__1
+      - status5__1
+      - color_mm0qsa02
+
+  - id: 18400993696
+    name: "'26 Summer Boston Curriculum Milestones"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 18400622437
+    name: "[Protocol] Curriculum Annual Milestones"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 9939148595
+    name: "25'-26' Afterschool Curriculum Milestones"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 9973608085
+    name: "[Milestone] Master: 2025-2026"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 18394849565
+    name: "Hiring Pipeline"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 18213436253
+    name: "'26 Summer Prototype Management"
+    check_frequency: "weekly"
+    columns_of_interest: "all"
+
+  - id: 8447150405
+    name: "Richard's: Weekly Planning & Time Log"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 5106461839
+    name: "'26 Peter's Weekly Planning & Time Log"
+    check_frequency: "daily"
+    columns_of_interest: "all"
+
+  - id: 8480912572
+    name: "BOW Entry 2026: Weekly Milestones"
+    check_frequency: "weekly"
+    columns_of_interest: "all"
+
+team:
+  members:
+    - name: "Richard Eustache"
+      monday_name: "Richard Eustache"
+      role: "Curriculum Lead"
+      boards:
+        - 18400842425
+        - 18400993696
+        - 18400622437
+        - 9939148595
+
+    - name: "Peter"
+      monday_name: "Peter Seo"
+      role: "CEO"
+      boards:
+        - 320096424
+        - 5106461839

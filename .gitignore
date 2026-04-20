@@ -1,0 +1,22 @@
+# Sensitive
+config.yaml
+.env
+
+# Generated data
+data/snapshots/
+data/latest.json
+data/previous.json
+data/diffs/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
