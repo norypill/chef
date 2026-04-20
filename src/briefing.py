@@ -1,9 +1,12 @@
 """
-Briefing generator: COS/PM/Exec Coach format.
+Briefing generator — Chef's daily brief format.
 
-Philosophy: Pill does the heavy lifting. Peter only reviews, approves, or makes
-decisions that genuinely require him. Every item comes with what Pill already did
+Chef is Peter's unified Chief of Staff + Project Manager + Executive Coach.
+Philosophy: Chef does the heavy lifting. Peter only reviews, approves, or makes
+decisions that genuinely require him. Every item comes with what Chef already did
 or will do, and what Peter's ONE action is.
+
+See intel/chef.md for the full persona definition.
 """
 
 import json
@@ -29,7 +32,7 @@ def generate_briefing(
     sections = []
     sections.append(f"# Daily Brief — {date_str}\n")
 
-    # What Pill already handled
+    # What Chef already handled
     sections.append(_already_handled_section(diff))
 
     # Approve / Decide (bare minimum Peter actions)
@@ -38,7 +41,7 @@ def generate_briefing(
     # Today's Play (2-3 things max, pre-broken-down)
     sections.append(_todays_play_section(diff, latest))
 
-    # Team: What Pill is managing for you
+    # Team: What Chef is managing for you
     sections.append(_team_management_section(diff, latest, intel))
 
     # Coaching moment
@@ -54,7 +57,7 @@ def generate_briefing(
 
 
 def _already_handled_section(diff: dict) -> str:
-    """Show Peter what Pill already took care of — builds trust and reduces his load."""
+    """Show Peter what Chef already took care of — builds trust and reduces his load."""
     lines = ["## Already Handled For You\n"]
     changes = diff.get("changes", {})
     handled = []
@@ -234,7 +237,7 @@ def _todays_play_section(diff: dict, latest: dict) -> str:
 
 
 def _team_management_section(diff: dict, latest: dict, intel: dict) -> str:
-    """What Pill is actively managing — Peter only intervenes if flagged."""
+    """What Chef is actively managing — Peter only intervenes if flagged."""
     lines = ["## Team (What I'm Managing For You)\n"]
     changes = diff.get("changes", {})
     members = _extract_team_members(latest)
@@ -383,6 +386,7 @@ def _dashboard_section(diff: dict) -> str:
         f"{summary.get('stalled_count', 0)} stalled | "
         f"{summary.get('due_this_week', 0)} due this week | "
         f"{summary.get('completed_since_last', 0)} shipped\n"
+        "\n— Chef\n"
     )
 
 

@@ -7,7 +7,7 @@
 #   ./bin/monday-sync.sh /path/to/config  # custom config path
 #
 # Cron example (8 AM and 4 PM ET):
-#   0 8,16 * * * cd ~/Projects/pill-pm && MONDAY_API_TOKEN="..." ./bin/monday-sync.sh >> logs/sync.log 2>&1
+#   0 8,16 * * * cd ~/pm && MONDAY_API_TOKEN="..." ./bin/monday-sync.sh >> logs/sync.log 2>&1
 
 set -euo pipefail
 
