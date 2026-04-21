@@ -6,6 +6,8 @@ fetches the full item content for each protocol board, caching results to
 data/snapshots/protocol-content-<board_id>.json. Run on Sunday 23:00 via
 `bin/chef-cron.sh protocol-refresh`.
 """
+from __future__ import annotations
+
 
 import json
 import logging

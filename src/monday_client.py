@@ -1,4 +1,6 @@
 """Monday.com GraphQL API client with pagination and rate limiting."""
+from __future__ import annotations
+
 
 import json
 import logging

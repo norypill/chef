@@ -1,4 +1,6 @@
 """CLI entrypoint for running a Monday.com sync."""
+from __future__ import annotations
+
 
 import logging
 import sys

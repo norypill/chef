@@ -1,4 +1,6 @@
 """CLI entrypoint for generating a PM briefing."""
+from __future__ import annotations
+
 
 import sys
 

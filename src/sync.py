@@ -1,4 +1,6 @@
 """Core sync logic: pull Monday.com boards, save snapshots, compute diffs."""
+from __future__ import annotations
+
 
 import json
 import logging

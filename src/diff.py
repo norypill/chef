@@ -1,4 +1,6 @@
 """Snapshot diffing engine: compares two Monday.com snapshots and reports changes."""
+from __future__ import annotations
+
 
 import logging
 from datetime import datetime, timezone
