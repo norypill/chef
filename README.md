@@ -90,6 +90,8 @@ cd ~/chef && git pull && bash package.sh && open chef.skill
 
 Pulls latest, rebuilds the bundle, and re-opens it in Cowork to pick up the new version.
 
+Running `bash package.sh` now auto-syncs `SKILL.md` with `intel/chef.md`. Single source of truth for Chef's persona is `intel/chef.md` — edit there, rebuild, `SKILL.md` regenerates automatically. The build also validates YAML frontmatter and enforces a 200-line cap on `SKILL.md` so the Cowork entry point stays concise.
+
 ## Cron Setup
 
 Chef runs on Peter's Mac via `bin/chef-cron.sh`, which dispatches on a positional arg (`sync` | `brief` | `protocol-refresh`). Every run is gated by `deploy-check.sh` first — if the repo is dirty, off `main`, out of sync with `origin/main`, missing env vars, or missing `config.yaml`, the run aborts and posts a red-line alert to Slack.
