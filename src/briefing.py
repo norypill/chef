@@ -64,6 +64,17 @@ def _already_handled_section(diff: dict) -> str:
     changes = diff.get("changes", {})
     handled = []
 
+    # If the last sync failed, warn loudly before anything else in this section
+    status = _read_sync_status()
+    if status is not None and not status.get("ok", True):
+        reason = status.get("reason") or "unknown reason"
+        ts = status.get("ts") or "unknown time"
+        short_reason = (reason[:200].rstrip() + "…") if len(reason) > 200 else reason
+        handled.append(
+            f"⚠ Last sync failed at {ts} — data may be stale. "
+            f"Reason: {short_reason}. Brief may be incomplete."
+        )
+
     # Tracked all boards
     summary = diff.get("summary", {})
     if summary.get("total_items_tracked", 0) > 0:
@@ -397,6 +408,18 @@ def _dashboard_section(diff: dict) -> str:
 def _read_json(path: str) -> dict:
     with open(path, "r") as f:
         return json.load(f)
+
+
+def _read_sync_status(path: str = "data/sync-status.json") -> dict | None:
+    """Return the last sync status dict, or None if the file is missing/invalid.
+    Written by bin/chef-cron.sh on every sync run so the brief can flag staleness."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return _read_json(str(p))
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def _load_intel(intel_dir: str) -> dict:

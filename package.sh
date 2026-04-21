@@ -41,5 +41,5 @@ fi
 
 # 4. Build the bundle
 rm -f chef.skill
-(cd skills/chef && zip -r ../../chef.skill . -x ".DS_Store")
+(cd skills/chef && zip -r ../../chef.skill . -x "*.DS_Store" ".DS_Store")
 echo "Built chef.skill from skills/chef/ ($LINES lines in SKILL.md) — drag into Cowork to install/update."
