@@ -78,6 +78,16 @@ query ($boardId: [ID!]!, $cursor: String!) {
 }
 """
 
+BOARDS_LIST_QUERY = """
+query ($page: Int!, $limit: Int!) {
+  boards(page: $page, limit: $limit) {
+    id
+    name
+    state
+  }
+}
+"""
+
 
 class MondayClient:
     """Wraps the Monday.com GraphQL API with pagination and status label resolution."""
@@ -159,6 +169,34 @@ class MondayClient:
             if i < len(board_configs) - 1:
                 time.sleep(self._delay)
         return boards
+
+    def discover_protocol_boards(self, name_prefix: str = "[Protocol]") -> list[dict]:
+        """
+        Discover all active Monday boards whose name starts with `name_prefix`
+        (case-insensitive). Paginates through Monday's board list 100 at a time.
+        Returns a list of {"id": str, "name": str}.
+        """
+        prefix_lower = name_prefix.lower()
+        matches: list[dict] = []
+        page = 1
+        limit = 100
+        while True:
+            logger.info("Discovering protocol boards — page %d", page)
+            data = self._execute(BOARDS_LIST_QUERY, {"page": page, "limit": limit})
+            boards = data.get("boards", []) or []
+            for b in boards:
+                name = b.get("name") or ""
+                state = b.get("state") or "active"
+                if state != "active":
+                    continue
+                if name.lower().startswith(prefix_lower):
+                    matches.append({"id": str(b["id"]), "name": name})
+            if len(boards) < limit:
+                break
+            page += 1
+            time.sleep(self._delay)
+        logger.info("Discovered %d protocol board(s) matching prefix %r", len(matches), name_prefix)
+        return matches
 
     # ---- helpers ----
 
