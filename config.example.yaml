@@ -8,78 +8,60 @@ sync:
   stalled_threshold_days: 5
   approaching_deadline_days: 7
 
-boards:
+# Boards Chef actively manages — authoritative list per intel/chef.md.
+# Chef has write authority on every board below and takes action, not just monitors.
+managed_boards:
   - id: 320096424
     name: "Peter's Tasks"
-    check_frequency: "2x_daily"
-    columns_of_interest:
-      - name
-      - status
-      - date4
-      - note
-      - people
-
-  - id: 18400842425
-    name: "'26 Summer NYC Curriculum Milestones"
-    check_frequency: "daily"
-    columns_of_interest:
-      - name
-      - person
-      - date_mm0qegqm
-      - color__1
-      - status9__1
-      - dup__of_date__mc__1
-      - dup__of_mc__1
-      - date_1__1
-      - status77__1
-      - status20__1
-      - status5__1
-      - color_mm0qsa02
-
-  - id: 18400993696
-    name: "'26 Summer Boston Curriculum Milestones"
-    check_frequency: "daily"
-    columns_of_interest: "all"
-
-  - id: 18400622437
-    name: "[Protocol] Curriculum Annual Milestones"
-    check_frequency: "daily"
-    columns_of_interest: "all"
-
-  - id: 9939148595
-    name: "25'-26' Afterschool Curriculum Milestones"
-    check_frequency: "daily"
-    columns_of_interest: "all"
-
-  - id: 9973608085
-    name: "[Milestone] Master: 2025-2026"
-    check_frequency: "daily"
-    columns_of_interest: "all"
-
-  - id: 18394849565
-    name: "Hiring Pipeline"
-    check_frequency: "daily"
-    columns_of_interest: "all"
-
-  - id: 18213436253
-    name: "'26 Summer Prototype Management"
-    check_frequency: "weekly"
-    columns_of_interest: "all"
-
-  - id: 8447150405
-    name: "Richard's: Weekly Planning & Time Log"
-    check_frequency: "daily"
+    role: "Triage, deduplicate, enforce due dates"
     columns_of_interest: "all"
 
   - id: 5106461839
-    name: "'26 Peter's Weekly Planning & Time Log"
-    check_frequency: "daily"
+    name: "Peter's Weekly Planning"
+    role: "Populate weekly plan, track hour budget"
     columns_of_interest: "all"
 
   - id: 8480912572
-    name: "BOW Entry 2026: Weekly Milestones"
-    check_frequency: "weekly"
+    name: "Team's BOW Entry 2026"
+    role: "Author Peter's weekly BOW entry"
     columns_of_interest: "all"
+
+  - id: 9973608085
+    name: "Master Milestones"
+    role: "Chase owners, surface slippage, update statuses"
+    columns_of_interest: "all"
+
+  - id: 9977801293
+    name: "Events and Birthday Milestones"
+    role: "Same as Master"
+    columns_of_interest: "all"
+
+  - id: 9993722959
+    name: "Holiday Camp Milestones"
+    role: "Same as Master"
+    columns_of_interest: "all"
+
+  - id: 9946710237
+    name: "2026 Prototype Management"
+    role: "Same as Master"
+    columns_of_interest: "all"
+
+  - id: 18400842425
+    name: "Summer NYC Curriculum"
+    role: "Same as Master"
+    columns_of_interest: "all"
+
+  - id: 9939148595
+    name: "Afterschool Milestones"
+    role: "Same as Master"
+    columns_of_interest: "all"
+
+# Protocol boards — reference only. Chef reads them to inform decisions but NEVER edits.
+# Board list is discovered dynamically by scanning Monday for names starting with name_prefix.
+# Content is refreshed every Sunday 23:00 via `bin/chef-cron.sh protocol-refresh`.
+protocol_boards:
+  discover: true
+  name_prefix: "[Protocol]"
 
 team:
   members:
@@ -88,8 +70,6 @@ team:
       role: "Curriculum Lead"
       boards:
         - 18400842425
-        - 18400993696
-        - 18400622437
         - 9939148595
 
     - name: "Peter"
