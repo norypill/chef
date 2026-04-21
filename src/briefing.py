@@ -8,6 +8,8 @@ or will do, and what Peter's ONE action is.
 
 See intel/chef.md for the full persona definition.
 """
+from __future__ import annotations
+
 
 import json
 import logging
