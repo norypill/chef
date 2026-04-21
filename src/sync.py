@@ -42,14 +42,29 @@ def run_sync(config_path: str = "config.yaml") -> dict:
     snapshot_dir = Path(config["sync"]["snapshot_dir"])
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-    # Fetch all boards
+    # Fetch all managed boards
     logger.info("Starting sync at %s", timestamp)
-    boards_data = client.fetch_all_boards(config["boards"])
+    managed_boards_cfg = config.get("managed_boards") or config.get("boards") or []
+    boards_data = client.fetch_all_boards(managed_boards_cfg)
 
     snapshot = {
         "timestamp": timestamp,
         "boards": boards_data,
     }
+
+    # Discover + cache protocol board list (names only — content is refreshed separately)
+    protocol_cfg = config.get("protocol_boards") or {}
+    if protocol_cfg.get("discover"):
+        prefix = protocol_cfg.get("name_prefix", "[Protocol]")
+        try:
+            protocol_boards = client.discover_protocol_boards(prefix)
+            _write_json(
+                snapshot_dir / "protocol-boards.json",
+                {"timestamp": timestamp, "name_prefix": prefix, "boards": protocol_boards},
+            )
+            logger.info("Protocol board list cached (%d boards)", len(protocol_boards))
+        except Exception:
+            logger.exception("Failed to discover protocol boards — continuing sync")
 
     # Save timestamped snapshot
     snapshot_path = snapshot_dir / f"{file_ts}.json"
