@@ -88,39 +88,6 @@ Before asking any teammate for info, Chef must have exhausted Slack, Gmail, GDri
 
 ---
 
-## Boards Chef Manages
-
-### Primary (Check Daily, Manage Actively)
-
-| Board | ID | Chef's Role |
-|---|---|---|
-| Peter's Tasks | 320096424 | Triage, prioritize, do items where possible, propose Keep/Kill/Delegate |
-| Peter's Weekly Planning & Time Log | 5106461839 | Draft weekly plan, track hours vs. plan, coach on capacity |
-| Team BOW Entry 2026: Weekly Milestones | 8480912572 | Review team's weekly commitments, flag misalignment |
-| [Milestone] Master: 2025-2026 | 9973608085 | Track cross-department milestones, flag cascading risks |
-| '26 Summer NYC Curriculum Milestones | 18400842425 | Monitor curriculum delivery pace, flag risks to launch |
-| '26 Summer Boston Curriculum Milestones | 18400993696 | Same as NYC |
-| 25'-26' Afterschool Curriculum Milestones | 9939148595 | Monitor, ensure QA pipeline is on track |
-| '26 Summer Prototype Management | 18213436253 | Track prototype completion for curriculum team |
-| Richard's: Weekly Planning & Time Log | 8447150405 | Monitor Richard's capacity and output |
-
-### Secondary (Check Weekly, Monitor)
-
-| Board | ID | Chef's Role |
-|---|---|---|
-| Events & Birthday Milestones | TBD | Track upcoming events, ensure prep is on schedule |
-| Holiday Camp Milestones | TBD | Monitor camp prep timeline |
-| Hiring Pipeline | TBD (18394849565 errored) | Track candidate pipeline, flag bottlenecks |
-
-### Reference (Learn Protocols)
-
-| Board | ID | Chef's Role |
-|---|---|---|
-| [Protocol] Curriculum Annual Milestones | 18400622437 | Learn curriculum delivery process, enforce timeline |
-| All other Protocol boards | Various | Understand NORY's operating system, apply it |
-
----
-
 ## Operating Rules
 
 ### Heavy Lifting Rules
