@@ -89,3 +89,56 @@ cd ~/chef && git pull && bash package.sh && open chef.skill
 ```
 
 Pulls latest, rebuilds the bundle, and re-opens it in Cowork to pick up the new version.
+
+## Cron Setup
+
+Chef runs on Peter's Mac via `bin/chef-cron.sh`, which dispatches on a positional arg (`sync` | `brief` | `protocol-refresh`). Every run is gated by `deploy-check.sh` first — if the repo is dirty, off `main`, out of sync with `origin/main`, missing env vars, or missing `config.yaml`, the run aborts and posts a red-line alert to Slack.
+
+### 1. Environment (`.env` at repo root)
+
+Create `~/chef/.env` (not committed — covered by `.gitignore`):
+
+```bash
+MONDAY_API_TOKEN=your_monday_personal_token
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+```
+
+`bin/chef-cron.sh` sources this file with `set -a` so both vars are auto-exported to every child process.
+
+### 2. Crontab entries
+
+Run `crontab -e` and add exactly these four lines:
+
+```
+45 5 * * 1-5 /Users/nory/chef/bin/chef-cron.sh sync
+0 6 * * 1-5 /Users/nory/chef/bin/chef-cron.sh brief
+0 9,11,13,15,17,19 * * 1-5 /Users/nory/chef/bin/chef-cron.sh sync
+0 23 * * 0 /Users/nory/chef/bin/chef-cron.sh protocol-refresh
+```
+
+Schedule rationale:
+- 05:45 Mon–Fri: pre-briefing sync to pull fresh board state
+- 06:00 Mon–Fri: generate briefing and post to Slack
+- 09:00/11:00/13:00/15:00/17:00/19:00 Mon–Fri: hourly-ish resyncs during the workday
+- 23:00 Sunday: full protocol-board content refresh for the week ahead
+
+### 3. Manual testing
+
+Run any mode on-demand from the repo root:
+
+```bash
+./bin/chef-cron.sh brief
+```
+
+Because `deploy-check.sh` requires `branch=main` and a clean tree, feature branches will not pass. Merge (or check out `main`) before testing end-to-end. Logs land in `logs/cron-YYYY-MM-DD.log`, each run header stamped with the current commit SHA.
+
+### 4. Pausing cron
+
+Open the crontab and comment out the lines:
+
+```bash
+crontab -e
+# prefix each chef line with # to pause, save and quit
+```
+
+Uncomment when ready to resume. `crontab -l` confirms active entries.
