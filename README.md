@@ -74,6 +74,29 @@ This repo hosts **two delivery channels** for the Chef persona — they coexist 
 
 **`intel/chef.md` is the canonical persona doctrine.** Both channels derive from it. When the persona changes, update `intel/chef.md` first, then reconcile `skills/chef/SKILL.md` and any Python-tool copy that references it.
 
+## Refreshing chef everywhere
+
+Chef ships to **three surfaces** and they have to stay in sync whenever `intel/chef.md` or a task playbook changes:
+
+1. **Cowork** — installed as the `chef.skill` bundle (from `skills/chef/`)
+2. **Claude.ai Project** — loose files uploaded manually (no API available today)
+3. **Python cron** — the full repo running on Peter's Mac
+
+The canonical update path is a single command:
+
+```bash
+make refresh
+```
+
+That one command:
+- Fast-forwards `main` from origin (fails loud if a merge is needed)
+- Runs `package.sh` (syncs `SKILL.md` from `intel/chef.md`, validates, rebuilds `chef.skill`)
+- Opens Finder at the repo root so `chef.skill` is one drag away
+- Prints a color-coded checklist of exactly which files to re-upload to the Claude.ai Project
+- Shows the Project URL from `config.yaml` (set `claude_project_url:` to personalize)
+
+The Claude.ai Project upload step is still manual — there is no API for project files — but the checklist enumerates every path, and task playbooks under `skills/chef/tasks/*.md` are auto-discovered, so new playbooks show up automatically. If `package.sh` fails, Finder does not open and the checklist is not printed; the failing exit code bubbles up.
+
 ## Install the Cowork skill on a new Mac
 
 ```bash
