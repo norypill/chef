@@ -1,3 +1,6 @@
+# Used by 'make refresh' to remind you where to upload the loose files.
+claude_project_url: "https://claude.ai/projects/REPLACE_ME"
+
 monday:
   api_url: "https://api.monday.com/v2"
   token_env: "MONDAY_API_TOKEN"  # Read from environment variable

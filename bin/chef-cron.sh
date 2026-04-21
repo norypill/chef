@@ -58,7 +58,7 @@ on_failure() {
     local exit_code=$?
     local err_snip="${LAST_ERR:-see ${LOG_FILE}}"
     # Truncate to keep Slack message compact
-    err_snip="$(printf '%s' "$err_snip" | head -c 500)"
+    err_snip="$(printf '%s' "$err_snip" | head -c 2000)"
     local msg
     msg=$(printf '🚨 CHEF FAILURE: %s — %s\nsha=%s  mode=%s  ts=%s' \
         "$STAGE" "$err_snip" "$COMMIT_SHA" "${MODE:-<none>}" "$RUN_TS")
