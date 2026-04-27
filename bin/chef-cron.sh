@@ -71,15 +71,16 @@ write_sync_status() {
 on_failure() {
     local exit_code=$?
     local err_snip="${LAST_ERR:-see ${LOG_FILE}}"
-    # Truncate to keep Slack message compact
-    err_snip="$(printf '%s' "$err_snip" | head -c 2000)"
+    # Keep the LAST 2000 chars — actual errors live at the end of the log,
+    # not the start. Slack message stays under its size limit.
+    err_snip="$(printf '%s' "$err_snip" | tail -c 2000)"
     # If sync was the failing stage, mark the status file so briefing.py can warn
     if [ "$STAGE" = "sync" ]; then
         write_sync_status false "$err_snip"
     fi
     local msg
-    msg=$(printf '🚨 CHEF FAILURE: %s — %s\nsha=%s  mode=%s  ts=%s' \
-        "$STAGE" "$err_snip" "$COMMIT_SHA" "${MODE:-<none>}" "$RUN_TS")
+    msg=$(printf '🚨 CHEF FAILURE: %s — %s\nsha=%s  mode=%s  ts=%s\nfull log: %s' \
+        "$STAGE" "$err_snip" "$COMMIT_SHA" "${MODE:-<none>}" "$RUN_TS" "$LOG_FILE")
     echo "$msg"
     post_slack "$msg"
     exit "$exit_code"
