@@ -11,6 +11,11 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+class BoardNotAccessibleError(Exception):
+    """Raised when a board exists in config but Monday returns no rows for it
+    (archived, deleted, or permissions revoked)."""
+
 BOARD_QUERY = """
 query ($boardId: [ID!]!) {
   boards(ids: $boardId) {
@@ -123,7 +128,13 @@ class MondayClient:
         """Fetch a complete board including all items with cursor-based pagination."""
         logger.info("Fetching board %s", board_id)
         data = self._execute(BOARD_QUERY, {"boardId": [str(board_id)]})
-        board = data["boards"][0]
+        boards_list = data.get("boards") or []
+        if not boards_list:
+            raise BoardNotAccessibleError(
+                f"Board {board_id} returned no data — likely archived, deleted, "
+                f"or revoked permissions"
+            )
+        board = boards_list[0]
 
         # Build column settings lookup for status label resolution
         column_settings = {}
@@ -164,8 +175,18 @@ class MondayClient:
             board_id = bc["id"]
             try:
                 boards[str(board_id)] = self.fetch_board(board_id)
+            except BoardNotAccessibleError as e:
+                logger.warning(
+                    "Skipping board %s (%s) — not accessible (archived, deleted, or perms "
+                    "revoked). Remove from config if intentional. Detail: %s",
+                    board_id, bc.get("name", "?"), e,
+                )
+                continue
             except Exception:
-                logger.exception("Failed to fetch board %s (%s)", board_id, bc.get("name", "?"))
+                logger.exception(
+                    "Unexpected failure fetching board %s (%s)",
+                    board_id, bc.get("name", "?"),
+                )
                 continue
             # Rate-limit delay between boards (skip after last)
             if i < len(board_configs) - 1:
