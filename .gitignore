@@ -1,6 +1,7 @@
 # Sensitive
 config.yaml
 .env
+.mcp-config-snippet.json
 
 # Generated data
 data/snapshots/

@@ -30,6 +30,8 @@ The cron toolchain in `src/` proves you don't need Zapier for Monday — `monday
 
 Native MCP servers run locally and connect each service directly. One-time setup per service, but no third-party hop and no shared failure mode.
 
+The fastest way to start: run `./bin/setup-native-mcp.sh`. It checks prerequisites (node, npm, python, jq), inspects your `claude_desktop_config.json`, generates a config-snippet template at `.mcp-config-snippet.json`, and prints a step-by-step manual checklist for the parts that require browser-based OAuth.
+
 The ecosystem for these is moving fast. The canonical sources to check for current install commands are:
 
 - **Anthropic's reference servers** — `github.com/modelcontextprotocol/servers` (official + community-maintained adapters; check the README for what's currently shipped)
@@ -53,21 +55,29 @@ After each new server is added, verify with: in a fresh Claude desktop chat, ask
 
 ---
 
-## Fallback: the snapshot bridge
+## Fallback: the snapshot bridges
 
-For the case where the in-session Chef hits a connector failure mid-BOW (Zapier approval gate, MCP server not yet installed for a service, network hiccup), there's a no-MCP-required escape hatch:
+When in-session Chef hits a connector failure (Zapier approval gate, MCP server not yet installed, network hiccup), there are two no-MCP-required escape hatches that talk directly to Monday's API:
+
+**Focused — just the 4 BOW boards (faster):**
 
 ```bash
 ./bin/chef-snapshot-for-session.sh
 ```
 
-This runs `src/bow_snapshot_cli.py`, which uses the same direct Monday API path the cron uses, fetches the 4 BOW-primary boards, and writes the result to `data/snapshots/bow-primary-latest.json`. Then tell the in-session Chef:
-
+Writes `data/snapshots/bow-primary-latest.json` covering boards 8480912572, 320096424, 5106461839, 9973608085. Tell Chef:
 > "Read `data/snapshots/bow-primary-latest.json` and continue the BOW playbook."
 
-Chef now has authoritative state for steps 3, 4, 5, and 8 with zero Zapier involvement.
+**Comprehensive — every board Chef tracks (slower, but full coverage):**
 
-This is **not** a substitute for native MCP — it only covers Monday, and it's a manual step. But it unblocks BOW immediately when something else is broken.
+```bash
+./bin/chef-snapshot-all.sh
+```
+
+Writes `data/snapshots/chef-everything-latest.json` covering every `managed_boards` entry from `config.yaml` plus every `[Protocol]` board discovered live. Tell Chef:
+> "Read `data/snapshots/chef-everything-latest.json` — that's the full current state of every board I manage."
+
+Both bridges use the same direct Monday API path the cron uses (`src/monday_client.py` with `MONDAY_API_TOKEN`). Zero Zapier, zero MCP layer at all. They are **not** a substitute for native MCP — they only cover Monday and they're manual one-shot snapshots, not interactive tools — but they unblock BOW or any other Chef session in seconds when something else is broken.
 
 ---
 

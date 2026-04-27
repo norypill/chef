@@ -101,13 +101,22 @@ The Claude.ai Project upload step is still manual — there is no API for projec
 
 Chef talks to Monday, Gmail, Slack, and Calendar. The recommended path is **native MCP servers**, not Zapier — see `docs/connectors.md` for the full rationale and install order.
 
-When an in-session Chef hits a connector failure mid-BOW (Zapier approval gate, MCP not yet installed, etc.), the immediate unblock is:
+To replace Zapier with native MCP servers, run:
 
 ```bash
-./bin/chef-snapshot-for-session.sh
+./bin/setup-native-mcp.sh
 ```
 
-That dumps the 4 BOW-primary boards into `data/snapshots/bow-primary-latest.json` via the same direct Monday API path the cron uses. Tell Chef in-session: *"Read `data/snapshots/bow-primary-latest.json` and continue the BOW playbook."*
+That checks prerequisites, generates a `claude_desktop_config.json` snippet template, and walks you through the manual OAuth steps that no script can do for you (browser-based grants).
+
+While native MCP is being set up — or any time an in-session Chef hits a connector failure — there are two **direct-API snapshot bridges** that bypass Zapier and MCP entirely:
+
+```bash
+./bin/chef-snapshot-for-session.sh   # 4 BOW-primary boards (fast)
+./bin/chef-snapshot-all.sh           # every managed + protocol board (full coverage)
+```
+
+Both use the cron's existing direct Monday GraphQL path (`MONDAY_API_TOKEN`). Tell in-session Chef to read the resulting JSON and proceed.
 
 ## Install the Cowork skill on a new Mac
 
