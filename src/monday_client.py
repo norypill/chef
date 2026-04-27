@@ -113,16 +113,46 @@ class MondayClient:
             "Content-Type": "application/json",
         }
         self._delay = 1.0  # seconds between board fetches for rate limiting
+        # Big boards (5k+ items) can take >30s for the first GraphQL response;
+        # default to 90s and allow override via config.yaml -> monday.request_timeout
+        monday_cfg = config.get("monday", {}) or {}
+        self._request_timeout = int(monday_cfg.get("request_timeout", 90))
+        self._max_attempts = int(monday_cfg.get("max_attempts", 2))
 
     def _execute(self, query: str, variables: dict) -> dict:
-        """Execute a GraphQL query against Monday.com."""
+        """Execute a GraphQL query against Monday.com.
+
+        Retries once on ReadTimeout — Monday's GraphQL is occasionally slow on
+        boards with thousands of items. Other failures bubble up immediately.
+        """
         payload = json.dumps({"query": query, "variables": variables})
-        resp = requests.post(self.api_url, headers=self.headers, data=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if "errors" in data:
-            raise RuntimeError(f"Monday.com API errors: {data['errors']}")
-        return data["data"]
+        last_exc: Exception | None = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                resp = requests.post(
+                    self.api_url,
+                    headers=self.headers,
+                    data=payload,
+                    timeout=self._request_timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if "errors" in data:
+                    raise RuntimeError(f"Monday.com API errors: {data['errors']}")
+                return data["data"]
+            except requests.exceptions.ReadTimeout as e:
+                last_exc = e
+                if attempt < self._max_attempts:
+                    backoff = 2.0 * attempt
+                    logger.warning(
+                        "Monday read timeout (attempt %d/%d) — retrying after %.1fs",
+                        attempt, self._max_attempts, backoff,
+                    )
+                    time.sleep(backoff)
+                else:
+                    raise
+        # Unreachable — loop either returns or raises
+        raise last_exc  # type: ignore[misc]
 
     def fetch_board(self, board_id: int) -> dict:
         """Fetch a complete board including all items with cursor-based pagination."""
