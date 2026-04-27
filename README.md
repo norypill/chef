@@ -97,6 +97,27 @@ That one command:
 
 The Claude.ai Project upload step is still manual — there is no API for project files — but the checklist enumerates every path, and task playbooks under `skills/chef/tasks/*.md` are auto-discovered, so new playbooks show up automatically. If `package.sh` fails, Finder does not open and the checklist is not printed; the failing exit code bubbles up.
 
+## Connectors (no Zapier required)
+
+Chef talks to Monday, Gmail, Slack, and Calendar. The recommended path is **native MCP servers**, not Zapier — see `docs/connectors.md` for the full rationale and install order.
+
+To replace Zapier with native MCP servers, run:
+
+```bash
+./bin/setup-native-mcp.sh
+```
+
+That checks prerequisites, generates a `claude_desktop_config.json` snippet template, and walks you through the manual OAuth steps that no script can do for you (browser-based grants).
+
+While native MCP is being set up — or any time an in-session Chef hits a connector failure — there are two **direct-API snapshot bridges** that bypass Zapier and MCP entirely:
+
+```bash
+./bin/chef-snapshot-for-session.sh   # 4 BOW-primary boards (fast)
+./bin/chef-snapshot-all.sh           # every managed + protocol board (full coverage)
+```
+
+Both use the cron's existing direct Monday GraphQL path (`MONDAY_API_TOKEN`). Tell in-session Chef to read the resulting JSON and proceed.
+
 ## Install the Cowork skill on a new Mac
 
 ```bash
