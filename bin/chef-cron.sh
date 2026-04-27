@@ -54,11 +54,29 @@ post_slack() {
         --data "$payload" "$SLACK_WEBHOOK_URL" >/dev/null || true
 }
 
+write_sync_status() {
+    # Write data/sync-status.json so briefing.py can warn when data is stale.
+    # args: $1 = ok ("true"|"false"), $2 = reason (string, may be empty)
+    local ok="$1"
+    local reason="$2"
+    mkdir -p data
+    jq -n \
+        --argjson ok "$ok" \
+        --arg ts "$(date -Iseconds)" \
+        --arg reason "$reason" \
+        '{ok: $ok, ts: $ts, reason: $reason}' \
+        > data/sync-status.json
+}
+
 on_failure() {
     local exit_code=$?
     local err_snip="${LAST_ERR:-see ${LOG_FILE}}"
     # Truncate to keep Slack message compact
     err_snip="$(printf '%s' "$err_snip" | head -c 2000)"
+    # If sync was the failing stage, mark the status file so briefing.py can warn
+    if [ "$STAGE" = "sync" ]; then
+        write_sync_status false "$err_snip"
+    fi
     local msg
     msg=$(printf '🚨 CHEF FAILURE: %s — %s\nsha=%s  mode=%s  ts=%s' \
         "$STAGE" "$err_snip" "$COMMIT_SHA" "${MODE:-<none>}" "$RUN_TS")
@@ -93,6 +111,8 @@ case "$MODE" in
         STAGE="sync"
         echo "[${STAGE}] pulling managed boards…"
         run_capture ./bin/monday-sync.sh
+        # Reaching here means run_capture succeeded (failure would have tripped ERR trap)
+        write_sync_status true ""
         ;;
 
     brief)
