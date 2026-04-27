@@ -97,6 +97,18 @@ That one command:
 
 The Claude.ai Project upload step is still manual — there is no API for project files — but the checklist enumerates every path, and task playbooks under `skills/chef/tasks/*.md` are auto-discovered, so new playbooks show up automatically. If `package.sh` fails, Finder does not open and the checklist is not printed; the failing exit code bubbles up.
 
+## Connectors (no Zapier required)
+
+Chef talks to Monday, Gmail, Slack, and Calendar. The recommended path is **native MCP servers**, not Zapier — see `docs/connectors.md` for the full rationale and install order.
+
+When an in-session Chef hits a connector failure mid-BOW (Zapier approval gate, MCP not yet installed, etc.), the immediate unblock is:
+
+```bash
+./bin/chef-snapshot-for-session.sh
+```
+
+That dumps the 4 BOW-primary boards into `data/snapshots/bow-primary-latest.json` via the same direct Monday API path the cron uses. Tell Chef in-session: *"Read `data/snapshots/bow-primary-latest.json` and continue the BOW playbook."*
+
 ## Install the Cowork skill on a new Mac
 
 ```bash
