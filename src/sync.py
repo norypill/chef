@@ -47,7 +47,12 @@ def run_sync(config_path: str = "config.yaml") -> dict:
     # Fetch all managed boards
     logger.info("Starting sync at %s", timestamp)
     managed_boards_cfg = config.get("managed_boards") or config.get("boards") or []
+    logger.info("[phase=fetch] %d managed board(s) configured", len(managed_boards_cfg))
     boards_data = client.fetch_all_boards(managed_boards_cfg)
+    logger.info(
+        "[phase=fetch] complete — %d/%d boards fetched",
+        len(boards_data), len(managed_boards_cfg),
+    )
 
     snapshot = {
         "timestamp": timestamp,
@@ -84,28 +89,41 @@ def run_sync(config_path: str = "config.yaml") -> dict:
     # Write new latest
     _write_json(latest_path, snapshot)
 
-    # Compute diff if we have a previous snapshot
+    # Compute diff if we have a previous snapshot. Wrap in try/except so a diff
+    # bug never kills a whole sync run — the snapshot itself is already saved.
     diff = {}
     if has_previous:
-        previous = _read_json(previous_path)
-        diff = compute_diff(previous, snapshot, config)
+        logger.info("[phase=diff] computing diff against previous snapshot")
+        try:
+            previous = _read_json(previous_path)
+            diff = compute_diff(previous, snapshot, config)
 
-        # Save diff
-        diffs_dir = Path("data/diffs")
-        diffs_dir.mkdir(parents=True, exist_ok=True)
-        diff_path = diffs_dir / f"{file_ts}_diff.json"
-        _write_json(diff_path, diff)
+            # Save diff
+            diffs_dir = Path("data/diffs")
+            diffs_dir.mkdir(parents=True, exist_ok=True)
+            diff_path = diffs_dir / f"{file_ts}_diff.json"
+            _write_json(diff_path, diff)
 
-        # Also keep a latest_diff.json for the briefing generator
-        _write_json(Path("data/diffs/latest_diff.json"), diff)
-        logger.info("Diff saved: %s", diff_path)
+            # Also keep a latest_diff.json for the briefing generator
+            _write_json(Path("data/diffs/latest_diff.json"), diff)
+            logger.info("[phase=diff] complete — saved %s", diff_path)
+        except Exception:
+            logger.exception(
+                "[phase=diff] FAILED — snapshot is still saved at %s; "
+                "brief will run against the previous diff (or empty if first run)",
+                snapshot_path,
+            )
+            diff = {}
     else:
-        logger.info("No previous snapshot — skipping diff (first run)")
+        logger.info("[phase=diff] skipped (no previous snapshot — first run)")
 
     # Cleanup old snapshots
-    _cleanup_old_snapshots(snapshot_dir, config["sync"].get("keep_snapshots", 30))
+    try:
+        _cleanup_old_snapshots(snapshot_dir, config["sync"].get("keep_snapshots", 30))
+    except Exception:
+        logger.exception("[phase=cleanup] FAILED — sync still considered successful")
 
-    logger.info("Sync complete")
+    logger.info("[phase=done] sync complete")
     return diff
 
 

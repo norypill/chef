@@ -86,10 +86,12 @@ def compute_diff(previous: dict, current: dict, config: dict) -> dict:
             days_overdue = (now.date() - due_date.date()).days
             # Only report if it wasn't already overdue in previous snapshot
             prev = prev_items.get(item_key)
-            prev_due = _parse_date(prev.get("date")) if prev else None
-            was_already_overdue = prev_due and prev_due.date() < _parse_datetime(
-                previous.get("timestamp", now.isoformat())
-            ).date() if prev else False
+            was_already_overdue = False
+            if prev:
+                prev_due = _parse_date(prev.get("date"))
+                prev_ts = _parse_datetime(previous.get("timestamp", now.isoformat()))
+                if prev_due is not None and prev_ts is not None:
+                    was_already_overdue = prev_due.date() < prev_ts.date()
 
             if not was_already_overdue:
                 newly_overdue.append({
